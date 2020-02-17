@@ -1,0 +1,458 @@
+#########################################################################################################################
+## Investigationnvestigation of Top Risk Factors For Prediction of Cardiovascular Diseases and Correlation among them
+#########################################################################################################################
+
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(gridExtra)
+library(cowplot)
+library(Information)
+library(MASS)
+library(car)
+library(caret)
+library(e1071)
+library(caTools)
+library(ROCR)
+library(DMwR)
+library(randomForest)
+library(GGally)
+library(corrplot)
+
+setwd("C:\\LJMU_MS\\Data")
+
+cvd_dataset<-read.csv("CleveDataSet.csv", header = TRUE, na.strings = c("NA",""), stringsAsFactors = FALSE)
+
+names(cvd_dataset)<-c("Age","Gender","ChPnType","RestBP","Cholesterol","FastBldSugar", "RestECG", "MaxHRate", "ExcIndAngina", "OldPeak", "Slope", "NumVesslColored", "Thal", "CVDCategory")
+
+cvd_dataset$Gender[cvd_dataset$Gender=="fem"]<-2
+cvd_dataset$Gender[cvd_dataset$Gender=="male"]<-1
+cvd_dataset$ChPnType[cvd_dataset$ChPnType=="angina"]<-1
+cvd_dataset$ChPnType[cvd_dataset$ChPnType=="asympt"]<-4
+cvd_dataset$ChPnType[cvd_dataset$ChPnType=="abnang"]<-2
+cvd_dataset$ChPnType[cvd_dataset$ChPnType=="notang"]<-3
+cvd_dataset$FastBldSugar[cvd_dataset$FastBldSugar=="true"]<-1
+cvd_dataset$FastBldSugar[cvd_dataset$FastBldSugar=="fal"]<-0
+cvd_dataset$RestECG[cvd_dataset$RestECG=="hyp"]<-2
+cvd_dataset$RestECG[cvd_dataset$RestECG=="norm"]<-0
+cvd_dataset$RestECG[cvd_dataset$RestECG=="abn"]<-1
+cvd_dataset$ExcIndAngina[cvd_dataset$ExcIndAngina=="true"]<-1
+cvd_dataset$ExcIndAngina[cvd_dataset$ExcIndAngina=="fal"]<-0
+cvd_dataset$Slope[cvd_dataset$Slope=="down"]<-3
+cvd_dataset$Slope[cvd_dataset$Slope=="flat"]<-2
+cvd_dataset$Slope[cvd_dataset$Slope=="up"]<-1
+cvd_dataset$Thal[cvd_dataset$Thal=="fix"]<-6
+cvd_dataset$Thal[cvd_dataset$Thal=="norm"]<-3
+cvd_dataset$Thal[cvd_dataset$Thal=="rev"]<-7
+cvd_dataset$CVDCategory[cvd_dataset$CVDCategory=="buff"]<-0
+cvd_dataset$CVDCategory[cvd_dataset$CVDCategory=="sick"]<-1
+
+
+#cvd_dataset$CVDCategory <- as.numeric(as.character(cvd_dataset$CVDCategory))
+cvd_dataset$CVDCategory <- as.factor(cvd_dataset$CVDCategory)
+
+#cvd_dataset[CVDCategory] <- lapply(cvd_dataset[CVDCategory] , factor)
+cvd_dataset$ChPnType <- as.numeric(as.character(cvd_dataset$ChPnType))
+cvd_dataset$FastBldSugar <- as.numeric(as.character(cvd_dataset$FastBldSugar))
+cvd_dataset$RestECG <- as.numeric(as.character(cvd_dataset$RestECG))
+cvd_dataset$ExcIndAngina <- as.numeric(as.character(cvd_dataset$ExcIndAngina))
+cvd_dataset$Slope <- as.numeric(as.character(cvd_dataset$Slope))
+cvd_dataset$Thal <- as.numeric(as.character(cvd_dataset$Thal))
+cvd_dataset$Gender <- as.numeric(as.character(cvd_dataset$Gender))
+cvd_dataset$NumVesslColored <- as.numeric(as.character(cvd_dataset$NumVesslColored))
+
+
+#Check NA values
+sapply(cvd_dataset, function(x) sum(is.na(x)))
+cvd_dataset<-na.omit(cvd_dataset)
+
+dim(cvd_dataset)
+
+str(cvd_dataset)
+
+#Take back up of cvd dataset  
+backup_cvd_dataset<-cvd_dataset
+ 
+# Check duplicates and remove them
+sum(duplicated(cvd_dataset))
+
+#Check NA values
+sapply(cvd_dataset, function(x) sum(is.na(x)))
+
+
+#Check for Blank Values
+sapply(cvd_dataset, function(x) sum( trimws(x) == "",na.rm = TRUE))
+
+
+# Divide the variables between categorical and continuous 
+categoricals <- c("Gender","ChPnType","FastBldSugar", "RestECG","ExcIndAngina","Slope","NumVesslColored", "Thal", "CVDCategory")
+
+continuous <- c("Age","RestBP","Cholesterol","MaxHRate", "OldPeak")
+
+## Data frames for categorical and continuous variables
+cvd_dataset_categorical <- cvd_dataset[,categoricals]
+cvd_dataset_continuous <- cvd_dataset[,continuous]
+
+
+# Univariate Analysis for Continuous variables 
+box_plots_theme<- theme(axis.line=element_blank(),axis.title=element_blank(), 
+                    axis.ticks=element_blank(), axis.text=element_blank())
+					
+plot_continuous_fun <- function(cont_col_name,var_name){  
+  plot_grid(ggplot(cvd_dataset_continuous, aes(cont_col_name))+ geom_histogram(binwidth = 10) +  labs(x = var_name),
+            ggplot(cvd_dataset_continuous, aes(x="",y=cont_col_name))+ geom_boxplot(width=0.1)+coord_flip()+box_plots_theme, 
+            align = "v",ncol = 1)  
+}
+
+plot_continuous_fun(cvd_dataset_continuous$Age,"Age")
+plot_continuous_fun(cvd_dataset_continuous$RestBP,"RestBP")
+plot_continuous_fun(cvd_dataset_continuous$Cholesterol,"Cholesterol")
+plot_continuous_fun(cvd_dataset_continuous$MaxHRate,"MaxHRate")
+plot_continuous_fun(cvd_dataset_continuous$OldPeak,"OldPeak")
+
+cvd_dataset_continuous %>%
+ggplot(aes(Age)) +
+    geom_histogram(binwidth = 1.25, color = "black",fill = "grey") +
+    geom_vline(xintercept = median(cvd_dataset_continuous$Age), lwd = 2, color = "blue") +
+    labs(title = "Distribution of Age",
+         x = "Age",
+         y = "Count") +
+    theme_minimal() +
+    scale_x_continuous(breaks = seq(10,100,10))
+	
+boxplot(cvd_dataset_continuous$Age, data= cvd_dataset_continuous, width=0.1, xlab="Count", ylab="Age") 
+summarise(cvd_dataset_continuous, med= median(Age))
+
+cvd_dataset_continuous %>%
+ggplot(aes(RestBP)) +
+    geom_histogram(binwidth = 1.25, color = "black",fill = "grey") +
+    geom_vline(xintercept = median(cvd_dataset_continuous$RestBP), lwd = 2, color = "blue") +
+    labs(title = "Distribution of RestBP",
+         x = "RestBP",
+         y = "Count") +
+    theme_minimal() +
+    scale_x_continuous(breaks = seq(20,200,20))
+	
+boxplot(cvd_dataset_continuous$RestBP, data= cvd_dataset_continuous, width=0.1, xlab="Count", ylab="RestBP") 
+summarise(cvd_dataset_continuous, med= median(RestBP))
+
+cvd_dataset_continuous %>%
+ggplot(aes(Cholesterol)) +
+    geom_histogram(binwidth = 1.25, color = "black",fill = "grey") +
+    geom_vline(xintercept = median(cvd_dataset_continuous$Cholesterol), lwd = 2, color = "blue") +
+    labs(title = "Distribution of Cholesterol",
+         x = "Cholesterol",
+         y = "Count") +
+    theme_minimal() +
+    scale_x_continuous(breaks = seq(10,100,10))
+	
+boxplot(cvd_dataset_continuous$Cholesterol, data= cvd_dataset_continuous, width=0.1, xlab="Count", ylab="Cholesterol") 
+summarise(cvd_dataset_continuous, med= median(Cholesterol))
+
+cvd_dataset_continuous %>%
+ggplot(aes(MaxHRate)) +
+    geom_histogram(binwidth = 1.25, color = "black",fill = "grey") +
+    geom_vline(xintercept = median(cvd_dataset_continuous$MaxHRate), lwd = 2, color = "blue") +
+    labs(title = "Distribution of MaxHRate",
+         x = "MaxHRate",
+         y = "Count") +
+    theme_minimal() +
+    scale_x_continuous(breaks = seq(10,200,10))
+	
+boxplot(cvd_dataset_continuous$MaxHRate, data= cvd_dataset_continuous, width=0.1, xlab="Count", ylab="MaxHRate") 
+summarise(cvd_dataset_continuous, med= median(MaxHRate))
+
+cvd_dataset_continuous %>%
+ggplot(aes(OldPeak)) +
+    geom_histogram(binwidth = 1.25, color = "black",fill = "grey") +
+    geom_vline(xintercept = median(cvd_dataset_continuous$OldPeak), lwd = 2, color = "blue") +
+    labs(title = "Distribution of OldPeak",
+         x = "OldPeak",
+         y = "Count") +
+    theme_minimal() +
+    scale_x_continuous(breaks = seq(0.1,10,0.1))
+	
+boxplot(cvd_dataset_continuous$OldPeak, data= cvd_dataset_continuous, width=0.1, xlab="Count", ylab="OldPeak") 
+summarise(cvd_dataset_continuous, med= median(OldPeak))
+
+univariate_categorical <- function(col_name,var_name) {
+  ggplot(cvd_dataset_categorical,aes(x = col_name)) +
+  geom_bar(aes(y = (..count..)/sum(..count..))) +
+  geom_text(aes(y = ((..count..)/sum(..count..)), label = scales::percent((..count..)/sum(..count..))), stat = "count", vjust = -0.25) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(y = "Percent", x = var_name)+theme(
+    axis.text.y=element_blank(), axis.ticks=element_blank(),
+    axis.title.y=element_blank(),axis.text.x = element_text(angle = 60, hjust = 1))}
+	
+	#ChPnType","FastBldSugar", "RestECG","ExcIndAngina","Slope","NumVesslColored", "Thal", "CVDCategory"
+	
+univariate_categorical(cvd_dataset_categorical$Gender,"Gender")
+univariate_categorical(cvd_dataset_categorical$ChPnType,"ChPnType")
+univariate_categorical(cvd_dataset_categorical$FastBldSugar,"FastBldSugar")
+univariate_categorical(cvd_dataset_categorical$RestECG,"RestECG")
+univariate_categorical(cvd_dataset_categorical$ExcIndAngina,"ExcIndAngina")
+univariate_categorical(cvd_dataset_categorical$Slope,"Slope")
+univariate_categorical(cvd_dataset_categorical$NumVesslColored,"NumVesslColored")
+univariate_categorical(cvd_dataset_categorical$Thal,"Thal")
+univariate_categorical(cvd_dataset_categorical$CVDCategory,"CVDCategory")
+
+#Bivariate Analysis
+ggplot(cvd_dataset, aes(Gender, ..count..)) + geom_bar(aes(fill = CVDCategory), position = "dodge")
+ggplot(cvd_dataset, aes(ChPnType, ..count..)) + geom_bar(aes(fill = CVDCategory), position = "dodge")
+ggplot(cvd_dataset, aes(FastBldSugar, ..count..)) + geom_bar(aes(fill = CVDCategory), position = "dodge")
+ggplot(cvd_dataset, aes(RestECG, ..count..)) + geom_bar(aes(fill = CVDCategory), position = "dodge")
+ggplot(cvd_dataset, aes(ExcIndAngina, ..count..)) + geom_bar(aes(fill = CVDCategory), position = "dodge")
+ggplot(cvd_dataset, aes(Slope, ..count..)) + geom_bar(aes(fill = CVDCategory), position = "dodge")
+ggplot(cvd_dataset, aes(NumVesslColored, ..count..)) + geom_bar(aes(fill = CVDCategory), position = "dodge")
+ggplot(cvd_dataset, aes(Thal)) + geom_bar(aes(fill = CVDCategory), position = "dodge")
+
+boxplot(Age~CVDCategory, cvd_dataset, main = "Age Vs CVDCategory Box Plot",xlab = "CVDCategory",ylab = "Age",col = "orange",border = "brown",horizontal =FALSE)
+boxplot(RestBP~CVDCategory, cvd_dataset, main = "RestBP Vs CVDCategory Box Plot",xlab = "CVDCategory",ylab = "RestBP",col = "orange",border = "brown",horizontal =FALSE)
+boxplot(Cholesterol~CVDCategory, cvd_dataset, main = "Cholesterol Vs CVDCategory Box Plot",xlab = "CVDCategory",ylab = "Cholesterol",col = "orange",border = "brown",horizontal =FALSE)
+boxplot(MaxHRate~CVDCategory, cvd_dataset, main = "MaxHRate Vs CVDCategory Box Plot",xlab = "CVDCategory",ylab = "MaxHRate",col = "orange",border = "brown",horizontal =FALSE)
+boxplot(OldPeak~CVDCategory, cvd_dataset, main = "OldPeak Vs CVDCategory Box Plot",xlab = "CVDCategory",ylab = "OldPeak",col = "orange",border = "brown",horizontal =FALSE)
+
+aggregate(Age ~ CVDCategory, data = cvd_dataset, summary)
+ aggregate(RestBP ~ CVDCategory, data = cvd_dataset, summary)
+aggregate(Cholesterol ~ CVDCategory, data = cvd_dataset, summary)
+aggregate(MaxHRate ~ CVDCategory, data = cvd_dataset, summary)
+aggregate(OldPeak ~ CVDCategory, data = cvd_dataset, summary)
+#Multi variate Analysis
+
+ggpairs(cvd_dataset_continuous, aes(colour = cvd_dataset_categorical$CVDCategory, alpha = 0.2), lower=list(combo=wrap("facethist", binwidth=0.5)))
+ggpairs(cvd_dataset_categorical, aes(colour = cvd_dataset_categorical$CVDCategory, alpha = 0.2), lower=list(combo=wrap("facethist", binwidth=0.5)))
+
+cvd_correlations <- cor(cvd_dataset[,1:9])
+corrplot(cvd_correlations, method="circle")
+
+## Test and Train Dataset (75%:25% ratio)
+
+set.seed(100)
+trainingindice= sample(1:nrow(cvd_dataset), 0.75*nrow(cvd_dataset))
+training_cvd_data = cvd_dataset[trainingindice,]
+test_cvd_data = cvd_dataset[-trainingindice,]
+
+#####################################################################################
+##                           Model Analysis                                        ##
+#####################################################################################
+
+
+######################### Logistic Regression ########################################
+
+
+model_glm <- glm(CVDCategory ~ . , data = training_cvd_data, family = binomial(logit)) 
+
+#Prediction using Test data
+
+predict_test = predict(model_glm, type = "response",newdata = test_cvd_data)
+summary(predict_test)
+   # Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+# 0.01483 0.12624 0.51665 0.49676 0.83482 0.99741 
+test_cvd_data$Probability<-	
+
+# finding the optimal cut off value
+test_data_cutoff <- factor(ifelse(test_cvd_data$CVDCategory==1,"Yes","No"))
+cutoff_fn <- function(cutoff) 
+ {
+     predicted_def <- factor(ifelse(predict_test >= cutoff, "Yes", "No"))
+     conf <- confusionMatrix(predicted_def, test_data_cutoff, positive = "Yes")
+     acc <- conf$overall[1]
+     sens <- conf$byClass[1]
+     spec <- conf$byClass[2]
+     out <- t(as.matrix(c(sens, spec, acc))) 
+     colnames(out) <- c("sensitivity", "specificity", "accuracy")
+     return(out)
+ }
+ 
+ 
+seqnce = seq(.01,.80,length=100)
+OUTPUT = matrix(0,100,3)
+for(i in 1:100)
+ {
+     OUTPUT[i,] = cutoff_fn(seqnce[i])
+ } 
+
+cutoff <- seqnce[which(abs(OUTPUT[,1]-OUTPUT[,2])==min(abs(OUTPUT[,1]-OUTPUT[,2])))]
+test_cutoff_actual <- factor(ifelse(predict_test >=cutoff, "Yes", "No"))
+conf_matrix <- confusionMatrix(test_cutoff_actual, test_data_cutoff, positive = "Yes")
+conf_matrix
+# Confusion Matrix and Statistics
+          # Reference
+# Prediction No Yes
+       # No  32   5
+       # Yes  5  32                  
+               # Accuracy : 0.8649          
+                 # 95% CI : (0.7655, 0.9332)
+    # No Information Rate : 0.5             
+    # P-Value [Acc > NIR] : 4.479e-11
+                  # Kappa : 0.7297          
+ # Mcnemar's Test P-Value : 1             
+            # Sensitivity : 0.8649          
+            # Specificity : 0.8649          
+         # Pos Pred Value : 0.8649          
+         # Neg Pred Value : 0.8649          
+             # Prevalence : 0.5000          
+         # Detection Rate : 0.4324          
+   # Detection Prevalence : 0.5000          
+      # Balanced Accuracy : 0.8649        
+       # 'Positive' Class : Yes     
+
+Predicted <- factor(c(0, 0, 1, 1))
+Actual <- factor(c(0, 1, 0, 1))
+Y      <- c(5, 32, 32, 5)
+df <- data.frame(Predicted, Actual, Y)
+
+library(ggplot2)
+ggplot(data =  df, mapping = aes(x = Predicted, y = Actual)) +
+  geom_tile(aes(fill = Y), colour = "white") +
+  geom_text(aes(label = sprintf("%1.0f", Y)), vjust = 1) +
+  scale_fill_gradient(low = "beige", high = "azure") +
+  theme_bw() + theme(legend.position = "none")
+  
+
+######################### Random Forest ########################################
+
+
+set.seed(100)
+trainingindice_rf= sample(1:nrow(cvd_dataset), 0.75*nrow(cvd_dataset))
+training_cvd_data_rf = cvd_dataset[trainingindice_rf,]
+test_cvd_data_rf = cvd_dataset[-trainingindice_rf,]
+
+randomf_model <- randomForest(CVDCategory ~.,data = training_cvd_data_rf,proximity = F,do.trace = T,mtry = 5,ntree=1000,importance = TRUE)
+  
+varImpPlot(randomf_model,type=2)
+test_predict_rf <- predict(randomf_model, test_cvd_data_rf, type = "prob")
+test_perftag_rf <- factor(ifelse(test_cvd_data_rf$CVDCategory==1,"yes","no")) 
+  
+cutoff_fn_rf <- function(cutoff) 
+{
+  predicted_response <- as.factor(ifelse(test_predict_rf[, 2] >= cutoff, "yes", "no"))
+  confmatrx_rf <- confusionMatrix(predicted_response, test_perftag_rf, positive = "yes")
+  acc_rf <- confmatrx_rf$overall[1]
+  sens_rf <- confmatrx_rf$byClass[1]
+  spec_rf <- confmatrx_rf$byClass[2]
+  OUT_rf <- t(as.matrix(c(sens_rf, spec_rf, acc_rf))) 
+  colnames(OUT_rf) <- c("sensitivity", "specificity", "accuracy")
+  return(OUT_rf)
+}
+  
+  
+s_rf = seq(.01,.99,length=100)
+OUT_rf = matrix(0,100,3)
+for(i in 1:100)
+ {
+     OUT_rf[i,] = cutoff_fn_rf(s_rf[i])
+ }
+
+cutoff_rf <- s_rf[which(abs(OUT_rf[,1]-OUT_rf[,2])==min(abs(OUT_rf[,1]-OUT_rf[,2])))]
+cutoff_rf 
+#[1] 0.4851515
+test_pred_opt_rf<- factor(ifelse(test_predict_rf[, 2] >= cutoff_rf, "yes", "no"))
+conf_rf <- confusionMatrix(test_pred_opt_rf, test_perftag_rf, positive = "yes")
+conf_rf
+
+# Confusion Matrix and Statistics
+
+          # Reference
+# Prediction no yes
+       # no  30   7
+       # yes  7  30
+                                         
+               # Accuracy : 0.8108         
+                 # 95% CI : (0.703, 0.8925)
+    # No Information Rate : 0.5            
+    # P-Value [Acc > NIR] : 3.111e-08      
+                                         
+                  # Kappa : 0.6216         
+ # Mcnemar's Test P-Value : 1              
+                                         
+            # Sensitivity : 0.8108         
+            # Specificity : 0.8108         
+         # Pos Pred Value : 0.8108         
+         # Neg Pred Value : 0.8108         
+             # Prevalence : 0.5000         
+         # Detection Rate : 0.4054         
+   # Detection Prevalence : 0.5000         
+      # Balanced Accuracy : 0.8108         
+                                         
+       # 'Positive' Class : yes  
+ 
+   Predicted_rf <- factor(c(0, 0, 1, 1))
+Actual_rf <- factor(c(0, 1, 0, 1))
+Y_rf     <- c(7, 30, 30, 7)
+df_rf <- data.frame(Predicted, Actual, Y)
+
+library(ggplot2)
+ggplot(data =  df_rf, mapping = aes(x = Predicted_rf, y = Actual_rf)) +
+  geom_tile(aes(fill = Y_rf), colour = "white") +
+  geom_text(aes(label = sprintf("%1.0f", Y_rf)), vjust = 1) +
+  scale_fill_gradient(low = "aliceblue", high = "bisque4") +
+  theme_bw() + theme(legend.position = "none")
+
+####################### KS - statistic -Random Forest - Test Data######################## #######################
+
+test_perftag_rf<-ifelse(test_perftag_rf == "yes", 1,0)
+test_pred_opt_rf<-ifelse(test_pred_opt_rf == "yes", 1,0)
+pred_rf_test<- prediction(test_pred_opt_rf, test_perftag_rf)
+perfo_rf_test<- performance(pred_rf_test, "tpr", "fpr")
+ks_rf_test <- attr(perfo_rf_test, "y.values")[[1]] - (attr(perfo_rf_test, "x.values")[[1]])
+max(ks_rf_test)  
+#[1] 0.6216216
+
+# ROC curve analysis
+roc_rf <- performance(pred_rf_test, measure = "auc")
+area_roc_rf <- roc_rf@y.values[[1]]
+area_roc_rf 
+#[1] 0.8108108
+ 
+ 
+rf_tprfpr_df <- data.frame(fpr=unlist(perfo_rf_test@x.values), tpr=unlist(perfo_rf_test@y.values))
+ 
+ggplot(rf_tprfpr_df ,aes(x=fpr, y=tpr)) +
+     geom_line(colour="red") +
+     geom_line(data=data.frame(), aes(x=c(0,1), y=c(0,1))) +
+     labs(x="False Positive Rate",
+          y="True Positive Rate",
+          title="ROC Curve for Random Forest") +
+     theme(axis.text.x=element_text(hjust=1)) 
+ 
+ 
+ 
+lift_rf <- function(labels , predict_prob_rf,groups=10) {
+     
+     if(is.factor(labels)) labels  <- as.integer(as.character(labels ))
+     if(is.factor(predict_prob_rf)) predict_prob_rf <- as.integer(as.character(predict_prob_rf))
+     helper = data.frame(cbind(labels , predict_prob_rf))
+     helper[,"bucket"] = ntile(-helper[,"predict_prob_rf"], groups)
+     gaintable = helper %>% group_by(bucket)  %>%
+         summarise_at(vars(labels ), funs(total = n(),
+                                          totalresp=sum(., na.rm = TRUE))) %>%
+         mutate(Cumresp = cumsum(totalresp),
+                Gain=Cumresp/sum(totalresp)*100,
+                Cumlift=Gain/(bucket*(100/groups))) 
+     return(gaintable)
+ }
+ 
+rf_decile = lift_rf(test_perftag_rf, test_pred_opt_rf, groups = 10)
+rf_decile
+
+# Plotting Gain Chart
+ggplot(rf_decile, aes(x = bucket)) +
+     labs(x = "Decile", y="Gain (%)")+
+     geom_line(data=rf_decile,aes(x=bucket,y=Gain),color='red',size=1, group = 1)+
+     scale_x_continuous(breaks = seq(1, 10, 1))+
+     scale_y_continuous(breaks = seq(20, 100, 10),labels=function(x) paste0(x,"%"))+
+     ggtitle("Gain Chart")
+
+# Plotting Lift Chart
+ggplot(rf_decile, aes(x = bucket)) +
+     labs(x = "Decile", y="Lift")+
+     geom_line(data=rf_decile,aes(x=bucket,y=Cumlift),color='red',size=1, group = 1)+
+     scale_x_continuous(breaks = seq(1, 10, 1))+
+     scale_y_continuous(breaks = seq(0.4, 4, 0.4))+
+     ggtitle("Lift Chart")
+
+#######################################################################################################################
+
+
+  
